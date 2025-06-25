@@ -69,6 +69,7 @@ PROJECT_ID=your-project-id
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
 | `CPD_HOST` | Yes | CPD cluster hostname (without https://) | `cpd-cluster.example.com` |
+| `CPD_FS_HOST` | Conditional | CPD flight service endpoint (without protocol and port) | `flight-service.cpd-cluster.example.com` |
 | `ENV_TYPE` | No | Environment type: `SW` (software) or `SAAS` | `SW` (default) |
 | `AUTH_TYPE` | No | Authentication method: `PASSWORD` or `API_KEY` | `PASSWORD` (default) |
 | `USERNAME` | Conditional | CPD username (required for SW environments) | `admin` |
