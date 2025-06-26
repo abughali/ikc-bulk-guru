@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # Constants
 OUTPUT_CONNECTION_ID="acb03b96-1d60-40bc-aae3-46ab56071832"
 OUTPUT_SCHEMA_NAME="BIDEMODATA"
-OUTPUT_TABLE_NAME="DQ_OUTPUT1"
+OUTPUT_TABLE_NAME="DQ_OUTPUT"
 FAILED_RECORDS_COUNT=5
 
 # Environment variables
@@ -295,8 +295,11 @@ def create_dq_rule(client: CPDClient, rule_name: str, description: str, dimensio
     """
     url = f"/data_quality/v3/projects/{project_id}/rules"
     
-    # Create field names (field1, field2, etc.)
-    field_names = [f"field{i+1}" for i in range(len(column_names))]
+    # Create field names - use "field" for single column, numbered for multiple
+    if len(column_names) == 1:
+        field_names = ["field"]  # Single column uses "field"
+    else:
+        field_names = [f"field{i+1}" for i in range(len(column_names))]  # Multiple columns use field1, field2, etc.
     
     # Create column bindings
     bindings = create_column_bindings(asset_id, field_names, column_names)
@@ -705,10 +708,13 @@ def main_dq_rules(input_file):
 # Example usage
 if __name__ == "__main__":
     # Expected CSV format (with header - skipped):
-    # Data quality rule,Description,Data quality dimension,Data quality definitions,Data quality rule expression,Asset name,Fields to bind
-    # Fields to bind can be separated by + or ; or | 
+    # DQ Rule,DQ Rule Description,DQ Dimension,DQ Definition Name,DQ Definition Expression,Asset Name to Bind,Field(s) to Bind
+    # Example:
+    # DQR for Bank Clients,No duplicates allowed,Uniqueness,DQD Uniqueness Single ID,"field UNIQUE",T_BANK_CLIENTS_VW,CLIENT_ID
     #
-    # DQ rule expression comes directly from the CSV file, examples:
+    # Fields to Bind can be separated by + or ; or | 
+    #
+    # DQ Definition Expression comes directly from the CSV file, examples:
     # - "field = 'Y' or field = 'N'"
     # - "trim(field) in_reference_list {'Block bounce', 'Hard bounce'}"
     # - "field in_reference_list {'F','D'}"
