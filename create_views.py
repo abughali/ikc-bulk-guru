@@ -413,11 +413,11 @@ def generate_asset_name(table_name: str, columns: str, where_clause: str, timest
     Returns:
         Generated asset name
     """
-    # Extract table name without schema
-    base_name = table_name.split('.')[-1] if '.' in table_name else table_name
+    # Remove quotes from table name if present
+    clean_table_name = table_name.strip('"\'')
     
-    # Simple naming: just table name + VIEW_SUFFIX
-    asset_name = f"{base_name}{VIEW_SUFFIX}"
+    # Use full table name including schema
+    asset_name = f"{clean_table_name}{VIEW_SUFFIX}"
     
     return asset_name
 
