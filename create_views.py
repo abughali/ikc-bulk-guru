@@ -413,8 +413,8 @@ def generate_asset_name(table_name: str, columns: str, where_clause: str, timest
     Returns:
         Generated asset name
     """
-    # Remove quotes from table name if present
-    clean_table_name = table_name.strip('"\'')
+    # Remove all single and double quotes from table name
+    clean_table_name = table_name.replace('"', '').replace("'", '')
     
     # Use full table name including schema
     asset_name = f"{clean_table_name}{VIEW_SUFFIX}"
