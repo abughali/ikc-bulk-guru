@@ -74,7 +74,7 @@ def getAssetByName(client: CPDClient, name: str) -> str:
         return response_data['results'][0]['metadata']['asset_id']
 
 
-def updateAssetDescription(client: CPDClient, asset_id: str, asset_name: str, display_name: str = None, description: str = None, tags: List[str] = None) -> str:
+def updateAsset(client: CPDClient, asset_id: str, asset_name: str, display_name: str = None, description: str = None, tags: List[str] = None) -> str:
     """
     Update asset display name, description and tags using bulk patch endpoint.
     Returns status string indicating success or failure.
@@ -292,7 +292,7 @@ def main(input_filename):
                         print(f"  → Will update: {' | '.join(updates_preview)}")
                         
                         # Update asset display name, description and tags
-                        update_status = updateAssetDescription(client, asset_id, asset_name, display_name, description, tags)
+                        update_status = updateAsset(client, asset_id, asset_name, display_name, description, tags)
                         result_row['update_status'] = update_status
                         
                     except AssertionError as msg:
