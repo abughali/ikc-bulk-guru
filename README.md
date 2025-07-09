@@ -166,17 +166,18 @@ Use the main bulk assignment script to assign governance artifacts to asset colu
 
 #### Prepare a CSV
 
-Create a CSV file with the following format (no header row required):
+Create a CSV file with the following format (with header row):
 
 ```csv
-Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags
 ```
 
 **Example CSV content:**
 ```csv
-customer_data,customer_id,Customer Identifier,Customer Data,Personally Identifiable Information,Data Privacy,Person Identifier,Data Classification
-sales_data,email_address,Email Address,Contact Information,Personal Data,Data Privacy,Email,Data Classification
-product_catalog,product_name,Product Name,Product Data,,,,
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags
+ADMIN.T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],Country Code,Location Data Classes,TAG1
+ADMIN.T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1
+ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1|TAG2
 ```
 
 **Column Descriptions:**
@@ -189,11 +190,15 @@ product_catalog,product_name,Product Name,Product Data,,,,
 - **Classification Category**: Category where the classification is located
 - **Data Class Name**: Data class to assign (leave empty to skip)
 - **Data Class Category**: Category where the data class is located
+- **Column Tags**: Tags pipe `|` separated (leave empty to skip)
+
 
 #### Run the Bulk Assignment
 
 ```sh
 python bulk_assign_project.py
+# OR
+python bulk_assign_catalog.py
 ```
 
 By default, it looks for `col_term_map.csv` in the current directory. You can modify the script to use a different input file.
@@ -207,16 +212,18 @@ By default, it looks for `col_term_map.csv` in the current directory. You can mo
 
 #### Understanding the Output
 
-The script creates an output file `{input_filename}_out.csv` with additional columns:
+The script creates an output file `out/{input_filename}_{date}_{time}.csv` with additional columns:
 - **Term Result**: SUCCESS, ERROR, or SKIPPED
 - **Classification Result**: SUCCESS, ERROR, or SKIPPED  
 - **Data Class Result**: SUCCESS, ERROR, or SKIPPED
-- **Asset Update Status**: Overall update status
+- **Update Status**: SUCCESS, ERROR, or SKIPPED
 
 **Example output:**
 ```csv
-customer_data,customer_id,Customer Identifier,Customer Data,PII,Data Privacy,Person ID,Data Classes,SUCCESS,SUCCESS,SUCCESS,SUCCESS
-sales_data,invalid_column,Email,Contacts,PII,Privacy,Email,Classes,ERROR: Column 'invalid_column' not found in asset,ERROR: Column 'invalid_column' not found in asset,ERROR: Column 'invalid_column' not found in asset,ERROR: Column 'invalid_column' not found in asset
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags,Term Result,Classification Result,Data Class Result,Update Status
+T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],Country Code,Location Data Classes,TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1|TAG2,SUCCESS,SUCCESS,SUCCESS,SUCCESS
 ```
 
 ## Scripts Overview

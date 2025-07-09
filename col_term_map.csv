@@ -1,3 +1,4 @@
-ADMIN.T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],Country Code,Location Data Classes
-ADMIN.T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized]
-ADMIN.T_US_STATES,STATE,,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized]
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags
+ADMIN.T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],Country Code,Location Data Classes,TAG1
+ADMIN.T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1
+ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1|TAG2
