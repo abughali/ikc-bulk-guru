@@ -131,6 +131,23 @@ Reference: https://www.ibm.com/docs/en/cloud-paks/cp-data/5.1.x?topic=tutorials-
 - Programmers Guide to Python: <https://wiki.python.org/moin/BeginnersGuide/Programmers>
 - Getting Started with Pandas: <https://pandas.pydata.org/docs/getting_started/index.html>
 
+## Scripts Overview
+
+### `export_artifacts.py`
+Exports all governance artifacts (terms, classifications, data classes) to CSV files for analysis or backup.
+
+### `bulks_assign_project.py` &
+### `bulks_assign_catalog.py`
+Performs bulk assignment of governance artifacts to asset columns.
+
+**Features:**
+- **Smart caching**: Preloads all artifacts to minimize API calls
+- **Validation**: Checks asset and column existence before updates
+- **Granular tracking**: Reports success/failure for each assignment type
+- **Incremental updates**: Only updates specified fields, preserves existing metadata
+- **Detailed logging**: Console output shows progress and issues
+- **Results tracking**: Generates comprehensive output CSV
+
 ## Use Cases
 
 Following are the key use cases that are covered in this repo:
@@ -169,15 +186,15 @@ Use the main bulk assignment script to assign governance artifacts to asset colu
 Create a CSV file with the following format (with header row):
 
 ```csv
-Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags
 ```
 
 **Example CSV content:**
 ```csv
-Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags
-ADMIN.T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],Country Code,Location Data Classes,TAG1
-ADMIN.T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1
-ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1|TAG2
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags
+ADMIN.T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1
+ADMIN.T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1
+ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1|TAG2
 ```
 
 **Column Descriptions:**
@@ -186,8 +203,10 @@ ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncat
 - **Column Description**: Description of the column
 - **Term Name**: Business term to assign (leave empty to skip)
 - **Term Category**: Category where the term is located
-- **Classification Name**: Classification to assign (leave empty to skip)
+- **Classification**: Classification to assign (leave empty to skip)
 - **Classification Category**: Category where the classification is located
+- **Classification2**: Second classification to assign (leave empty to skip)
+- **Classification2 Category**: Category where the second classification is located
 - **Data Class Name**: Data class to assign (leave empty to skip)
 - **Data Class Category**: Category where the data class is located
 - **Column Tags**: Tags pipe `|` separated (leave empty to skip)
@@ -213,38 +232,19 @@ By default, it looks for `col_term_map.csv` in the current directory. You can mo
 #### Understanding the Output
 
 The script creates an output file `out/{input_filename}_{date}_{time}.csv` with additional columns:
-- **Term Result**: SUCCESS, ERROR, or SKIPPED
-- **Classification Result**: SUCCESS, ERROR, or SKIPPED  
-- **Data Class Result**: SUCCESS, ERROR, or SKIPPED
-- **Update Status**: SUCCESS, ERROR, or SKIPPED
+- **Term Result**: SUCCESS, FAILED, or SKIPPED
+- **Classification Result**: SUCCESS, FAILED, or SKIPPED
+- **Classification2 Result**: SUCCESS, FAILED, or SKIPPED  
+- **Data Class Result**: SUCCESS, FAILED, or SKIPPED
+- **Update Status**: SUCCESS, FAILED, or SKIPPED
 
 **Example output:**
 ```csv
-Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags,Term Result,Classification Result,Data Class Result,Update Status
-T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],Country Code,Location Data Classes,TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS
-T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS
-T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],US State Code,[uncategorized],TAG1|TAG2,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags,Term Result,Classification Result,Classification2 Result,Data Class Result,Update Status
+T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1|TAG2,SUCCESS,SUCCESS,SUCCESS,SUCCESS,SUCCESS
 ```
-
-## Scripts Overview
-
-### `export_artifacts.py`
-Exports all governance artifacts (terms, classifications, data classes) to CSV files for analysis or backup.
-
-**Features:**
-- Handles pagination for large datasets
-- Exports to timestamped CSV files
-
-### `bulks_assign_project.py` and `bulks_assign_catalog.py` (Bulk Assignment)
-Performs bulk assignment of governance artifacts to asset columns.
-
-**Features:**
-- **Smart caching**: Preloads all artifacts to minimize API calls
-- **Validation**: Checks asset and column existence before updates
-- **Granular tracking**: Reports success/failure for each assignment type
-- **Incremental updates**: Only updates specified fields, preserves existing metadata
-- **Detailed logging**: Console output shows progress and issues
-- **Results tracking**: Generates comprehensive output CSV
 
 ## Best Practices
 

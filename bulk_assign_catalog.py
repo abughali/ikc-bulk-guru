@@ -352,17 +352,17 @@ def main(input_filename):
         results_data = []
         
         try:
-            with open(input_filename) as csvfile:
-                reader = csv.reader(csvfile, skipinitialspace=True, delimiter=',')
+            with open(input_filename) as csv_file:
+                reader = csv.reader(csv_file, skipinitialspace=True, delimiter=',')
                 
                 # Read and validate header
                 try:
                     header_row = next(reader)
-                    print(f"Header found: {header_row}")
+                    print(f"CSV Columns: {header_row}")
                     
-                    # Validate header has minimum required columns
-                    if len(header_row) < 10:
-                        print(f"ERROR: Header has only {len(header_row)} columns, need at least 10")
+                    if len(header_row) < 12:
+                        print(f"ERROR: Header has only {len(header_row)} columns, need at least 12")
+                        print("Expected: Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags")
                         return
                         
                 except StopIteration:
@@ -371,8 +371,8 @@ def main(input_filename):
                 
                 # Process data rows
                 for row_num, row in enumerate(reader, 2):  # Start from row 2 since row 1 is header
-                    if len(row) < 10:  # Ensure we have all required columns including tags
-                        print(f"WARNING: Row {row_num} has insufficient columns, skipping")
+                    if len(row) < 12:
+                        print(f"WARNING: Row {row_num} has insufficient columns ({len(row)}/12), skipping")
                         continue
                     
                     asset_name = row[0]
@@ -380,17 +380,20 @@ def main(input_filename):
                     column_description = row[2]
                     term_name = row[3]
                     term_category = row[4]
-                    classification_name = row[5]
+                    classification = row[5]
                     classification_category = row[6]
-                    data_class_name = row[7]
-                    data_class_category = row[8]
-                    tags_string = row[9]
+                    classification2 = row[7]
+                    classification2_category = row[8]
+                    data_class_name = row[9]
+                    data_class_category = row[10]
+                    tags_string = row[11]
                     
                     print(f"\nProcessing row {row_num}: {asset_name}.{column_name}")
                     
                     # Initialize result tracking
                     term_result = "SKIPPED"
                     classification_result = "SKIPPED"
+                    classification2_result = "SKIPPED"
                     data_class_result = "SKIPPED"
                     
                     try:
@@ -399,9 +402,9 @@ def main(input_filename):
                         
                         # Validate column exists
                         if not validateColumn(client, asset_id, column_name):
-                            error_msg = f"Column '{column_name}' not found in asset"
+                            error_msg = f"Column '{column_name}' is not found in asset {asset_name}"
                             print(f"  ✗ {error_msg}")
-                            results_data.append(row + ["FAILED: Column not found", "FAILED: Column not found", "FAILED: Column not found", f"FAILED: {error_msg}"])
+                            results_data.append(row + ["FAILED: Column not found", "FAILED: Column not found", "FAILED: Column not found", "FAILED: Column not found", f"FAILED: {error_msg}"])
                             continue
                         
                         # Build column data structure
@@ -412,7 +415,7 @@ def main(input_filename):
                             column_data['description'] = column_description.strip()
                             print(f"  ✓ Description: {column_description[:50]}{'...' if len(column_description) > 50 else ''}")
                         
-                        # Process term assignment
+                        # Process term assignment (unchanged)
                         if term_name and term_category:
                             term_global_id = get_term_id(term_category, term_name)
                             if term_global_id:
@@ -428,22 +431,44 @@ def main(input_filename):
                         else:
                             term_result = "SKIPPED"
                         
-                        # Process classification assignment
-                        if classification_name and classification_category:
-                            artifact_id, global_id = get_classification_id(classification_category, classification_name)
+                        classifications = []
+                        
+                        # Process first classification
+                        if classification and classification_category:
+                            artifact_id, global_id = get_classification_id(classification_category, classification)
                             if artifact_id and global_id:
-                                column_data['column_classifications'] = [{
+                                classifications.append({
                                     'id': artifact_id,
                                     'global_id': global_id,
-                                    'name': classification_name
-                                }]
+                                    'name': classification
+                                })
                                 classification_result = "SUCCESS"
-                                print(f"  ✓ Classification: {classification_name} (Category: {classification_category})")
+                                print(f"  ✓ Classification 1: {classification} (Category: {classification_category})")
                             else:
                                 classification_result = "FAILED: Not found"
-                                print(f"  ✗ Classification '{classification_name}' with category '{classification_category}' not found")
+                                print(f"  ✗ Classification 1 '{classification}' with category '{classification_category}' not found")
                         else:
                             classification_result = "SKIPPED"
+                        
+                        # Process second classification
+                        if classification2 and classification2_category:
+                            artifact_id, global_id = get_classification_id(classification2_category, classification2)
+                            if artifact_id and global_id:
+                                classifications.append({
+                                    'id': artifact_id,
+                                    'global_id': global_id,
+                                    'name': classification2
+                                })
+                                classification2_result = "SUCCESS"
+                                print(f"  ✓ Classification 2: {classification2} (Category: {classification2_category})")
+                            else:
+                                classification2_result = "FAILED: Not found"
+                                print(f"  ✗ Classification 2 '{classification2}' with category '{classification2_category}' not found")
+                        else:
+                            classification2_result = "SKIPPED"
+                        
+                        if classifications:
+                            column_data['column_classifications'] = classifications
                         
                         # Process data class assignment
                         if data_class_name and data_class_category:
@@ -474,22 +499,16 @@ def main(input_filename):
                         
                         # Update asset if we have valid assignments
                         if column_data:
-                            # Use the bulk patch endpoint
                             update_status = updateColumnInfoBulk(client, asset_id, asset_name, column_name, column_data)
-                            results_data.append(row + [term_result, classification_result, data_class_result, update_status])
+                            results_data.append(row + [term_result, classification_result, classification2_result, data_class_result, update_status])
                         else:
-                            results_data.append(row + [term_result, classification_result, data_class_result, "SKIPPED: No valid assignments"])
+                            results_data.append(row + [term_result, classification_result, classification2_result, data_class_result, "SKIPPED: No valid assignments"])
                             print(f"  ! No valid assignments found for {column_name}")
-                        
-                    except AssertionError as msg:
-                        error_msg = f"Asset error: {msg}"
-                        print(f"  ✗ {error_msg}")
-                        results_data.append(row + ["FAILED: Asset error", "FAILED: Asset error", "FAILED: Asset error", f"FAILED: {error_msg}"])
-                        
+                                                
                     except Exception as e:
                         error_msg = f"Processing error: {e}"
                         print(f"  ✗ {error_msg}")
-                        results_data.append(row + ["FAILED: Processing error", "FAILED: Processing error", "FAILED: Processing error", f"FAILED: {error_msg}"])
+                        results_data.append(row + ["FAILED: Processing error", "FAILED: Processing error", "FAILED: Processing error", "FAILED: Processing error", f"FAILED: {error_msg}"])
         
         except FileNotFoundError:
             print(f"ERROR: {input_filename} file not found")
@@ -504,17 +523,16 @@ def main(input_filename):
         print("WRITING RESULTS CSV")
         print("="*60)
         
-        # Write results CSV
         try:
-            with open(output_filename, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
+            with open(output_filename, 'w', newline='', encoding='utf-8') as csv_file:
+                writer = csv.writer(csv_file)
                 
                 # Write header
                 header = [
                     'Asset Name', 'Column Name', 'Column Description', 'Term Name', 'Term Category',
-                    'Classification Name', 'Classification Category', 
+                    'Classification', 'Classification Category', 'Classification2', 'Classification2 Category',
                     'Data Class Name', 'Data Class Category', 'Tags',
-                    'Term Result', 'Classification Result', 'Data Class Result', 'Update Status'
+                    'Term Result', 'Classification Result', 'Classification2 Result', 'Data Class Result', 'Update Status'
                 ]
                 writer.writerow(header)
                 
@@ -524,12 +542,12 @@ def main(input_filename):
             
             print(f"Results written to: {output_filename}")
             
-            # Print summary statistics
+            # Summary statistics
             total_rows = len(results_data)
-            successful_updates = sum(1 for r in results_data if r[-1] == "SUCCESS")
-            failed_updates = sum(1 for r in results_data if r[-1].startswith("FAILED:"))
-            skipped_updates = sum(1 for r in results_data if r[-1].startswith("SKIPPED:"))
-            error_updates = sum(1 for r in results_data if r[-1].startswith("ERROR:"))
+            successful_updates = sum(1 for r in results_data if len(r) > 16 and r[16] == "SUCCESS")
+            failed_updates = sum(1 for r in results_data if len(r) > 16 and r[16].startswith("FAILED"))
+            skipped_updates = sum(1 for r in results_data if len(r) > 16 and r[16].startswith("SKIPPED"))
+            error_updates = sum(1 for r in results_data if len(r) > 16 and r[16].startswith("ERROR"))
             
             print(f"\nSUMMARY:")
             print(f"Total rows processed: {total_rows}")
@@ -539,24 +557,29 @@ def main(input_filename):
             if error_updates > 0:
                 print(f"! Error updates: {error_updates}")
 
-            # Additional breakdown
+            # Additional breakdown with updated indices
             if total_rows > 0:
-                term_successes = sum(1 for r in results_data if len(r) > 10 and r[10] == "SUCCESS")
-                term_skipped = sum(1 for r in results_data if len(r) > 10 and r[10] == "SKIPPED")
-                term_failed = sum(1 for r in results_data if len(r) > 10 and r[10].startswith(("FAILED:", "ERROR:")))
+                term_successes = sum(1 for r in results_data if len(r) > 12 and r[12] == "SUCCESS")
+                term_skipped = sum(1 for r in results_data if len(r) > 12 and r[12] == "SKIPPED")
+                term_failed = sum(1 for r in results_data if len(r) > 12 and r[12].startswith(("FAILED:", "ERROR:")))
                 
-                classification_successes = sum(1 for r in results_data if len(r) > 11 and r[11] == "SUCCESS")
-                classification_skipped = sum(1 for r in results_data if len(r) > 11 and r[11] == "SKIPPED")
-                classification_failed = sum(1 for r in results_data if len(r) > 11 and r[11].startswith(("FAILED:", "ERROR:")))
+                classification_successes = sum(1 for r in results_data if len(r) > 13 and r[13] == "SUCCESS")
+                classification_skipped = sum(1 for r in results_data if len(r) > 13 and r[13] == "SKIPPED")
+                classification_failed = sum(1 for r in results_data if len(r) > 13 and r[13].startswith(("FAILED:", "ERROR:")))
                 
-                data_class_successes = sum(1 for r in results_data if len(r) > 12 and r[12] == "SUCCESS")
-                data_class_skipped = sum(1 for r in results_data if len(r) > 12 and r[12] == "SKIPPED")
-                data_class_failed = sum(1 for r in results_data if len(r) > 12 and r[12].startswith(("FAILED:", "ERROR:")))
+                classification2_successes = sum(1 for r in results_data if len(r) > 14 and r[14] == "SUCCESS")
+                classification2_skipped = sum(1 for r in results_data if len(r) > 14 and r[14] == "SKIPPED")
+                classification2_failed = sum(1 for r in results_data if len(r) > 14 and r[14].startswith(("FAILED:", "ERROR:")))
+                
+                data_class_successes = sum(1 for r in results_data if len(r) > 15 and r[15] == "SUCCESS")
+                data_class_skipped = sum(1 for r in results_data if len(r) > 15 and r[15] == "SKIPPED")
+                data_class_failed = sum(1 for r in results_data if len(r) > 15 and r[15].startswith(("FAILED:", "ERROR:")))
                 
                 print(f"\nMetadata Assignment Breakdown (✓ Success / - Skipped / ✗ Failed):")
-                print(f"Terms:           ✓ {term_successes} / - {term_skipped} / ✗ {term_failed}")
-                print(f"Classifications: ✓ {classification_successes} / - {classification_skipped} / ✗ {classification_failed}")
-                print(f"Data Classes:    ✓ {data_class_successes} / - {data_class_skipped} / ✗ {data_class_failed}")
+                print(f"Terms:             ✓ {term_successes} / - {term_skipped} / ✗ {term_failed}")
+                print(f"Classifications 1: ✓ {classification_successes} / - {classification_skipped} / ✗ {classification_failed}")
+                print(f"Classifications 2: ✓ {classification2_successes} / - {classification2_skipped} / ✗ {classification2_failed}")
+                print(f"Data Classes:      ✓ {data_class_successes} / - {data_class_skipped} / ✗ {data_class_failed}")
             
         except Exception as e:
             print(f"ERROR writing results CSV: {e}")
@@ -568,8 +591,8 @@ def main(input_filename):
         print(f"Detailed results saved to: {output_filename}")
 
 if __name__ == "__main__":
-    # File format (WITH header):
-    # Asset Name,Column Name,Column Description,Term Name,Term Category,Classification Name,Classification Category,Data Class Name,Data Class Category,Tags
-    # T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],Country Code,Location Data Classes,TAG1|TAG2
+    # File format (WITH header - will be skipped):
+    # Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags
+    # T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1|TAG2
 
     main(input_filename='col_term_map.csv')
