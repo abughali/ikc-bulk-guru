@@ -3,12 +3,11 @@ import csv
 from dotenv import load_dotenv
 from datetime import datetime
 from cpd_client import CPDClient
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 load_dotenv(override=True)
 
 # Configuration - Set the custom property group to work with
-# Change this to target different custom attribute groups in your CPD environment
 CUSTOM_PROP_GROUP_ID = "data_quality"
 
 # Environment variables
@@ -36,29 +35,102 @@ def getAssetByName(client: CPDClient, name: str) -> str:
         return response_data['results'][0]['metadata']['asset_id']
 
 
-def updateColumnProperties(client: CPDClient, asset_id: str, asset_name: str, custom_prop_group_id: str, column_data: Dict):
-    """Update properties for a single column."""
+def getAssetData(client: CPDClient, asset_id: str) -> Optional[Dict]:
+    """Get asset data once and cache it. Returns None if error."""
+    url = f"/v2/assets/{asset_id}?catalog_id={catalog_id}&allow_metadata_on_dpr_deny=true"
+    
+    response = client.get(url)
+    
+    if response.status_code != 200:
+        print(f"Error getting asset details: {response.text}")
+        return None
+    
+    return response.json()
+
+
+def analyzeAssetData(asset_data: Dict, custom_prop_group_id: str, column_name: str) -> Dict:
+    """Analyze asset data and return all the info we need in one pass."""
+    entity = asset_data.get('entity', {})
+    
+    # Check if column exists in data_asset.columns
+    data_asset_columns = entity.get('data_asset', {}).get('columns', [])
+    column_exists_in_asset = any(col.get('name') == column_name for col in data_asset_columns)
+    
+    # Check custom property group
+    custom_group = entity.get(custom_prop_group_id, {})
+    group_exists = custom_prop_group_id in entity
+    
+    # Find column in custom property group
+    custom_columns = custom_group.get('columns', [])
+    column_in_group_index = None
+    column_in_group_data = None
+    
+    for i, column in enumerate(custom_columns):
+        if column.get('name') == column_name:
+            column_in_group_index = i
+            column_in_group_data = column
+            break
+    
+    return {
+        'column_exists_in_asset': column_exists_in_asset,
+        'group_exists': group_exists,
+        'column_in_group_exists': column_in_group_index is not None,
+        'column_in_group_index': column_in_group_index,
+        'column_in_group_data': column_in_group_data
+    }
+
+
+def updateCustomProperty(client: CPDClient, asset_id: str, asset_name: str, custom_prop_group_id: str, column_name: str, new_properties: Dict, asset_analysis: Dict):
+    """Update custom properties."""
 
     url = f"/v2/assets/bulk_patch?catalog_id={catalog_id}"
     
-    column_name = column_data.get('name', 'Unknown')
-    print(f"  → Setting {custom_prop_group_id} properties for column: {column_name}")
+    print(f"  → Custom column properties update for {asset_name}.{column_name}")
     
-    # Log what properties are being set for this column
-    for property_name, property_value in column_data.items():
-        if property_name != 'name':
-            print(f"    • {property_name}: {property_value}")
+    operations = []
     
-    # Use the configured custom property group ID in path
-    operations = [{
-        "op": "add",
-        "path": f"/entity/{custom_prop_group_id}",
-        "value": {
-            "columns": [column_data]
-        }
-    }]
+    if not asset_analysis['group_exists']:
+        # Case 1: Custom property group doesn't exist - create it with the column
+        column_data = {"name": column_name}
+        column_data.update(new_properties)
+        
+        operations.append({
+            "op": "add",
+            "path": f"/entity/{custom_prop_group_id}",
+            "value": {
+                "columns": [column_data]
+            }
+        })
+        print(f"    • Creating {custom_prop_group_id} group with column {column_name}")
+    else:
+        # Case 2: Custom property group exists
+        if not asset_analysis['column_in_group_exists']:
+            # Case 2a: Group exists but column doesn't - append the column
+            column_data = {"name": column_name}
+            column_data.update(new_properties)
+            
+            operations.append({
+                "op": "add",
+                "path": f"/entity/{custom_prop_group_id}/columns/-",
+                "value": column_data
+            })
+            print(f"    • Appending new column {column_name} to existing {custom_prop_group_id}")
+        else:
+            # Case 2b: Both group and column exist - update individual properties
+            print(f"    • Updating existing column {column_name}")
+            
+            column_index = asset_analysis['column_in_group_index']
+            
+            # Update each property individually
+            for property_name, property_value in new_properties.items():
+                operations.append({
+                    "op": "add",  # "add" operation replaces if exists, creates if doesn't
+                    "path": f"/entity/{custom_prop_group_id}/columns/{column_index}/{property_name}",
+                    "value": property_value
+                })
+                print(f"      - {property_name}: {property_value}")
     
-    # Build the payload 
+    # Build the payload with all operations
     payload = {
         "resources": [
             {
@@ -105,26 +177,6 @@ def updateColumnProperties(client: CPDClient, asset_id: str, asset_name: str, cu
         return f"ERROR: HTTP {response.status_code}"
 
 
-def validateColumn(client: CPDClient, asset_id: str, column_name: str) -> bool:
-    """This function validates that a column exists in the asset metadata."""
-    url = f"/v2/assets/{asset_id}?catalog_id={catalog_id}&allow_metadata_on_dpr_deny=true"
-    
-    response = client.get(url)
-    
-    if response.status_code != 200:
-        print(f"Error getting asset details: {response.text}")
-        return False
-    
-    asset_data = response.json()
-    
-    if 'entity' in asset_data and 'data_asset' in asset_data['entity'] and 'columns' in asset_data['entity']['data_asset']:
-        columns = asset_data['entity']['data_asset']['columns']
-        column_names = {col['name'] for col in columns}
-        return column_name in column_names
-    
-    return False
-
-
 def getCustomAttributeSchemas(client: CPDClient) -> Dict:
     """Fetch all custom attribute schemas from the CPD instance."""
 
@@ -142,7 +194,6 @@ def getCustomAttributeSchemas(client: CPDClient) -> Dict:
     schemas = {}
     
     for resource in schema_data.get('resources', []):
-
         group_id = resource.get('name')
         if group_id and resource.get('is_column_custom_attribute', False):
             schemas[group_id] = resource
@@ -183,7 +234,6 @@ def getFieldSchema(custom_attr_schema: Dict, custom_prop_id: str) -> Dict:
             if custom_prop_id in properties:
                 return properties[custom_prop_id]
     
-    available_props = list(properties.keys())
     available_field_keys = [f.get('key') for f in fields]
     raise ValueError(f"Custom property ID '{custom_prop_id}' not found. Available field keys: {available_field_keys}")
 
@@ -247,7 +297,7 @@ def main(input_filename):
     print(f"Input file: {input_filename}")
     print(f"Output file: {output_filename}")
     print(f"Target custom property group: {CUSTOM_PROP_GROUP_ID}")
-    print("Will validate against defined custom attribute from CPD")
+    print("Validating against defined custom attribute from CPD")
     
     with CPDClient() as client:
         print("\n" + "="*60)
@@ -269,7 +319,7 @@ def main(input_filename):
         print(f"PROCESSING CSV FILE FOR '{CUSTOM_PROP_GROUP_ID}' PROPERTIES")
         print("="*60)
         
-        # Read CSV and process each row individually
+        # Read CSV and process each row
         results_data = []
         
         try:
@@ -322,10 +372,11 @@ def main(input_filename):
                     print("ERROR: File is empty or has no header")
                     return
                 
-                # Process each row individually - ONE COLUMN UPDATE PER ROW
+                # Process each row
                 for row_num, row in enumerate(reader, 2):  # Start from row 2 since row 1 is header
                     if len(row) < 2:
                         print(f"WARNING: Row {row_num} has insufficient columns ({len(row)}), skipping")
+                        results_data.append(row + ["SKIPPED - Insufficient columns"] + ["SKIPPED" for _ in custom_prop_ids])
                         continue
                     
                     asset_name = row[0].strip()
@@ -333,12 +384,13 @@ def main(input_filename):
                     
                     if not asset_name or not column_name:
                         print(f"WARNING: Row {row_num} missing asset name or column name, skipping")
+                        results_data.append(row + ["SKIPPED - Missing asset/column name"] + ["SKIPPED" for _ in custom_prop_ids])
                         continue
                     
                     print(f"\nProcessing Row {row_num}: {asset_name}.{column_name}")
                     
-                    # Build column properties structure for this single column
-                    column_properties = {"name": column_name}
+                    # Build new properties dictionary for this column
+                    new_properties = {}
                     field_results = []
                     has_valid_properties = False
                     
@@ -353,7 +405,7 @@ def main(input_filename):
                                     field_schema = getFieldSchema(custom_attr_schema, custom_prop_id)
                                     parsed_value = parseValueFromSchema(raw_value, custom_prop_id, field_schema)
                                     if parsed_value is not None:
-                                        column_properties[custom_prop_id] = parsed_value
+                                        new_properties[custom_prop_id] = parsed_value
                                         field_results.append("SUCCESS")
                                         has_valid_properties = True
                                     else:
@@ -375,15 +427,23 @@ def main(input_filename):
                         # Get asset ID
                         asset_id = getAssetByName(client, asset_name)
                         
-                        # Validate column exists
-                        if not validateColumn(client, asset_id, column_name):
+                        # Get asset data once and analyze everything
+                        asset_data = getAssetData(client, asset_id)
+                        if asset_data is None:
+                            results_data.append(row + ["FAILED - Could not retrieve asset data"] + field_results)
+                            continue
+                        
+                        asset_analysis = analyzeAssetData(asset_data, CUSTOM_PROP_GROUP_ID, column_name)
+                        
+                        # Validate column exists in the asset
+                        if not asset_analysis['column_exists_in_asset']:
                             print(f"  ✗ Column {column_name} not found in asset {asset_name}")
                             results_data.append(row + ["FAILED - Column not found"] + field_results)
                             continue
                         
                         print(f"  ✓ Column {column_name} exists in asset {asset_name}")
                         
-                        update_status = updateColumnProperties(client, asset_id, asset_name, CUSTOM_PROP_GROUP_ID, column_properties)
+                        update_status = updateCustomProperty(client, asset_id, asset_name, CUSTOM_PROP_GROUP_ID, column_name, new_properties, asset_analysis)
                         results_data.append(row + [update_status] + field_results)
                                                 
                     except Exception as e:
@@ -463,8 +523,5 @@ if __name__ == "__main__":
     # 1. Validate CUSTOM_PROP_GROUP_ID exists in CPD custom attribute groups
     # 2. Validate all custom property IDs in CSV header exist in that group's schema
     # 3. Parse values according to the actual schema definitions (integer, date, list, etc.)
-    #
-    # Please note that this operation will overwrite the complete custom property group.
-    # Existing values/assignments not present in the input will be removed.
     #
     main(input_filename='column_properties.csv')
