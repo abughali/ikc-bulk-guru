@@ -2,10 +2,18 @@ from typing import Dict, List
 from cpd_client import CPDClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import concurrent.futures
+import threading
+from collections import defaultdict
 import time
 from datetime import datetime
 import csv
 import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+# Environment variables
+project_id = os.environ.get('PROJECT_ID')
 
 def get_datastage_settings(client: CPDClient, project_id: str) -> Dict:
     """
@@ -144,10 +152,7 @@ def run_job(client: CPDClient, project_id: str, job_id: str, run_name: str = "jo
     
     # Run the job
     url = f"/v2/jobs/{job_id}/runs?project_id={project_id}"
-    
-    print(f"Running job: {job_id}")
-    print(f"Run name: {run_name}")
-    
+        
     try:
         response = client.post(url, json=payload)
         
@@ -160,10 +165,10 @@ def run_job(client: CPDClient, project_id: str, job_id: str, run_name: str = "jo
             job_name = job_run_data['entity']['job_run']['job_name']
             job_ref = job_run_data['entity']['job_run']['job_ref']
             
-            print(f"Job run started successfully!")
-            print(f"   Run ID: {run_id}")
-            print(f"   Job Name: {job_name}")
-            print(f"   State: {state}")
+            #print(f"Job run started successfully!")
+            #print(f"   Run ID: {run_id}")
+            #print(f"   Job Name: {job_name}")
+            #print(f"   State: {state}")
             
             return {
                 'success': True,
@@ -265,7 +270,7 @@ def listAssets(client: CPDClient, asset_type, query, project_id):
     catalog_assets = []
     payload = {
         "query": query,
-        "limit":200
+        "limit": 200
     }
     stop_flag = 0
 
@@ -463,7 +468,7 @@ def create_dqr_flow_job_matrix(client: CPDClient,
     print(f"   Flows with DQR: {len([f for f in flows_dict.values() if f['has_dqr']])}")
     print(f"   Flows without DQR: {len(flows_without_dqr)}")
     
-    # Step 6: Create missing jobs if requested
+    # Step 6: Create missing jobs
     job_creation_results = []
     if create_missing_jobs and flows_without_jobs:
         print(f"\n6. Creating {len(flows_without_jobs)} missing jobs...")
@@ -557,10 +562,10 @@ def create_dqr_flow_job_matrix(client: CPDClient,
     }
 
 def run_jobs_concurrent(
-                        client: CPDClient, 
+                        client: CPDClient,
                         project_id: str,
                         flows_matrix: Dict,
-                        max_workers: int = 10,
+                        max_workers: int = 20,
                         wait_initial_monitor: float = 10.0,
                         wait_poll_interval: float = 5.0,
                         wait_next_job_submission = 1.0,
@@ -568,7 +573,7 @@ def run_jobs_concurrent(
                         total_timeout: float = 86400.0  # 24 hours total timeout
 ) -> Dict:
     """
-    Run jobs concurrently and track execution details with flow mapping
+    Run jobs concurrently with enhanced status tracking showing grouped counts
     
     Args:
         client: CPD client
@@ -585,7 +590,7 @@ def run_jobs_concurrent(
         Dict: Execution results with detailed tracking
     """
     print("="*80)
-    print("CONCURRENT JOB EXECUTION WITH TRACKING")
+    print("CONCURRENT JOB EXECUTION WITH STATUS GROUP TRACKING")
     print("="*80)
     print(f"Configuration:")
     print(f"  • Max Workers: {max_workers}")
@@ -610,18 +615,83 @@ def run_jobs_concurrent(
     
     print(f"\n   Found {len(jobs_to_run)} DataStage jobs to run")
     
+    # Thread-safe status tracking
+    status_lock = threading.Lock()
+    job_statuses = defaultdict(int)
+    job_statuses['NotSubmitted'] = len(jobs_to_run)
+    job_details = {}  # Store job_id -> (job_run_id, current_state)
+    last_status_print_time = time.time()
+    status_print_interval = 5.0  # Print status every 5 seconds
+    
+    def update_status(job_id: str, new_status: str, job_run_id: str = None, initial_submission: bool = False):
+        """Thread-safe status update with automatic printing"""
+        nonlocal last_status_print_time
+        
+        with status_lock:
+            # Handle initial submission
+            if initial_submission:
+                job_statuses['NotSubmitted'] -= 1
+                job_statuses[new_status] = job_statuses.get(new_status, 0) + 1
+                job_details[job_id] = (job_run_id, new_status)
+            else:
+                # Update existing job status
+                if job_id in job_details:
+                    old_run_id, old_status = job_details[job_id]
+                    if old_status in job_statuses and job_statuses[old_status] > 0:
+                        job_statuses[old_status] -= 1
+                    job_statuses[new_status] = job_statuses.get(new_status, 0) + 1
+                    job_details[job_id] = (job_run_id or old_run_id, new_status)
+                else:
+                    # New job without previous status
+                    job_statuses[new_status] = job_statuses.get(new_status, 0) + 1
+                    job_details[job_id] = (job_run_id, new_status)
+            
+            # Print status if enough time has passed or on significant events
+            current_time = time.time()
+            should_print = (current_time - last_status_print_time >= status_print_interval or 
+                          new_status in ['Completed', 'Failed', 'CompletedWithErrors', 'CompletedWithWarnings', 'Canceled'])
+            
+            if should_print:
+                print_status_summary()
+                last_status_print_time = current_time
+    
+    def print_status_summary():
+        """Print current status summary (must be called within status_lock)"""
+        # Clear previous line and print new status
+        status_parts = []
+        
+        # Order matters for readability
+        status_order = ['NotSubmitted', 'Submitting', 'Starting', 'Queued', 'Running', 
+                       'Completed', 'CompletedWithWarnings', 'CompletedWithErrors', 
+                       'Failed', 'Canceled', 'Timeout', 'Error']
+        
+        for status in status_order:
+            if status in job_statuses and job_statuses[status] > 0:
+                status_parts.append(f"{status}:{job_statuses[status]}")
+        
+        # Add any other statuses not in our predefined order
+        for status, count in job_statuses.items():
+            if status not in status_order and count > 0:
+                status_parts.append(f"{status}:{count}")
+        
+        timestamp = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+        print(f"\r[{timestamp}] Status: {' | '.join(status_parts)}", end='\n')
+    
     def process_job(job_id: str, index: int) -> Dict:
-        """Process job run with timeout protection"""
+        """Process job run with timeout protection and status tracking"""
         start_time = time.time()
         
         try:
             flow_data = job_to_flow_map[job_id]
-            print(f"Processing index: {index} - Flow: {flow_data['flow_name']}")
+            
+            # Update status to Submitting
+            update_status(job_id, 'Submitting', initial_submission=True)
             
             # Create job run
             job_run_result = run_job(client, project_id, job_id)
             
             if not job_run_result['success']:
+                update_status(job_id, 'SubmitFailed')
                 return {
                     'job_id': job_id,
                     'success': False,
@@ -632,6 +702,10 @@ def run_jobs_concurrent(
             
             job_run_id = job_run_result['run_id']
             job_name = job_run_result['job_name']
+            
+            # Update to initial state
+            initial_state = job_run_result.get('state', 'Starting')
+            update_status(job_id, initial_state, job_run_id)
             
             # Initial wait
             time.sleep(wait_initial_monitor)
@@ -644,8 +718,8 @@ def run_jobs_concurrent(
             while True:
                 # Check job timeout
                 if time.time() - start_time > job_timeout:
-                    print(f"Timeout: Job {job_run_id} exceeded {job_timeout}s")
                     state = 'Timeout'
+                    update_status(job_id, state, job_run_id)
                     break
                 
                 try:
@@ -653,21 +727,24 @@ def run_jobs_concurrent(
                     
                     if job_run_info['success']:
                         state = job_run_info['state']
-                        print(f"jobRunId:{job_run_id}:{state}")
+                        
+                        # Update status if changed
+                        update_status(job_id, state, job_run_id)
                         
                         if state in final_states:
-                            print(f"Job run monitoring done for jobRunId: {job_run_id}")
                             final_run_info = job_run_info
                             break
                         else:
                             time.sleep(wait_poll_interval)
                     else:
-                        state = 'Error'
+                        state = 'MonitorError'
+                        update_status(job_id, state, job_run_id)
                         break
                         
                 except Exception as e:
-                    print(f"Error monitoring job {job_run_id}: {e}")
+                    print(f"\nError monitoring job {job_run_id}: {e}")
                     state = 'MonitorError'
+                    update_status(job_id, state, job_run_id)
                     break
             
             return {
@@ -683,7 +760,8 @@ def run_jobs_concurrent(
             }
             
         except Exception as e:
-            print(f"Exception for jobId: {job_id} - {e}")
+            print(f"\nException for jobId: {job_id} - {e}")
+            update_status(job_id, 'Exception')
             return {
                 'job_id': job_id,
                 'success': False,
@@ -692,6 +770,10 @@ def run_jobs_concurrent(
                 'flow_data': job_to_flow_map.get(job_id, {}),
                 'duration': time.time() - start_time
             }
+    
+    # Print initial status
+    with status_lock:
+        print_status_summary()
     
     start_time = time.time()
     results = []
@@ -750,11 +832,19 @@ def run_jobs_concurrent(
             'flow_data': {}
         })
     
+    # Final status print
+    with status_lock:
+        print("\n" + "="*80)
+        print("FINAL STATUS SUMMARY:")
+        print_status_summary()
+    
     total_duration = time.time() - start_time
     successful_jobs = [r for r in results if r.get('success', False)]
     
     print(f"\nEXECUTION COMPLETE:")
-    print(f"   • Completed: {len(successful_jobs)}/{len(jobs_to_run)}")
+    print(f"   • Total Jobs: {len(jobs_to_run)}")
+    print(f"   • Completed: {len(successful_jobs)}")
+    print(f"   • Failed: {len(jobs_to_run) - len(successful_jobs)}")
     print(f"   • Duration: {total_duration:.1f}s")
     print(f"   • Success Rate: {(len(successful_jobs)/len(jobs_to_run)*100):.1f}%")
     
@@ -786,6 +876,14 @@ def run_jobs_concurrent(
         }
         summary_data.append(summary_entry)
     
+    # Final status distribution
+    print(f"\nFINAL STATUS DISTRIBUTION:")
+    with status_lock:
+        for status, count in sorted(job_statuses.items()):
+            if count > 0:
+                percentage = (count / len(jobs_to_run)) * 100
+                print(f"   • {status}: {count} ({percentage:.1f}%)")
+    
     return {
         'total_jobs': len(jobs_to_run),
         'completed_jobs': len(successful_jobs),
@@ -793,7 +891,8 @@ def run_jobs_concurrent(
         'total_duration': total_duration,
         'results': results,
         'success_rate': (len(successful_jobs) / len(jobs_to_run)) * 100 if jobs_to_run else 0,
-        'summary': summary_data
+        'summary': summary_data,
+        'final_status_counts': dict(job_statuses)
     }
 
 def print_summary(summary_data: List[Dict]):
@@ -811,7 +910,6 @@ def print_summary(summary_data: List[Dict]):
     completed_runs = len([s for s in summary_data if s['state'] == 'Completed'])
     runs_with_dqr = len([s for s in summary_data if s['dqr_id']])
     
-    print(f"📊 STATISTICS:")
     print(f"   • Total Runs: {total_runs}")
     print(f"   • Successful Runs: {successful_runs} ({(successful_runs/total_runs*100):.1f}%)")
     print(f"   • Completed Successfully: {completed_runs} ({(completed_runs/total_runs*100):.1f}%)")
@@ -868,10 +966,9 @@ def run_complete_pipeline(client: CPDClient,
 
 # Main
 if __name__ == "__main__":
-    project_id = "397e525b-249b-4f4c-97f4-2fb51274dd0e"
     
     with CPDClient() as client:
-        # Run the complete pipeline with comprehensive tracking and timeouts
+        # Run the complete pipeline
         pipeline_results = run_complete_pipeline(
             client, 
             project_id
