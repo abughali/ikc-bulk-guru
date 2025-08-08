@@ -182,7 +182,7 @@ def scan_project_data_assets(client, project_id):
     stop_flag = 0
 
     while stop_flag == 0:
-        response = client.post(f"/v2/asset_types/data_asset/search?project_id={project_id}", json=payload)
+        response = client.post(f"/v2/asset_types/data_asset/search?project_id={project_id}&allow_metadata_on_dpr_deny=true", json=payload)
 
         if response.status_code != 200:
             print(f"Error scanning project {project_id}: {response.status_code} - {response.text}")
@@ -209,7 +209,7 @@ def scan_data_asset(client, project_id, asset_id):
     Returns:
         dict: JSON data containing metadata for the specified asset
     """
-    response = client.get(f"/v2/assets/{asset_id}?project_id={project_id}")
+    response = client.get(f"/v2/assets/{asset_id}?project_id={project_id}&allow_metadata_on_dpr_deny=true")
 
     if response.status_code != 200:
         print(f"Error scanning asset {asset_id}: {response.status_code} - {response.text}")
