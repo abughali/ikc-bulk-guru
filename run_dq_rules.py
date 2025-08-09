@@ -266,30 +266,32 @@ def get_job_run_info(client: CPDClient, project_id: str, job_id: str, run_id: st
             'job_id': job_id
         }
 
-def listAssets(client: CPDClient, asset_type, query, project_id):
-    catalog_assets = []
-    payload = {
-        "query": query,
-        "limit": 200
-    }
-    stop_flag = 0
+def listAssets(client: CPDClient, asset_type: str, query, project_id: str):
+    """
+    Scan assets of a given type with CPD search pagination.
+    """
+    url = f"/v2/asset_types/{asset_type}/search?project_id={project_id}&hide_deprecated_response_fields=true"
+    payload = {"query": query, "limit": 20}
+    assets = []
 
-    while stop_flag == 0:
-        url = f"/v2/asset_types/{asset_type}/search?project_id={project_id}&hide_deprecated_response_fields=true"
-        
-        response = client.post(url, json=payload)
+    while True:
+        resp = client.post(url, json=payload)
+        if resp.status_code != 200:
+            body = resp.text
+            raise ValueError(f"Error scanning catalog (HTTP {resp.status_code}): {body}")
 
-        if response.status_code != 200:
-            raise ValueError(f"Error scanning catalog: {response.text}")
-        else:
-            if 'next' in response.json():
-                payload = response.json()['next']
-            else:
-                stop_flag += 1
+        data = resp.json()
 
-        catalog_assets.extend(response.json()['results'])
-    
-    return catalog_assets
+        results = data.get("results", [])
+        if results:
+            assets.extend(results)
+
+        nxt = data.get("next")
+        if not nxt:
+            break
+        payload = nxt
+
+    return assets
 
 def assetRelationships(client: CPDClient, id: str, project_id: str) -> str:
     """
@@ -536,9 +538,6 @@ def create_dqr_flow_job_matrix(client: CPDClient,
             status = "MISSING JOB"
         
         print(f"{dqr_name:<30} {flow_name:<30} {has_job:<10} {status}")
-        
-        if flow_data['has_job']:
-            flows_with_jobs += 1
     
     # Step 8: Summary
     print(f"\n8. SUMMARY:")
@@ -715,6 +714,8 @@ def run_jobs_concurrent(
             state = 'Unknown'
             final_run_info = None
             
+            consecutive_failures = 0
+
             while True:
                 # Check job timeout
                 if time.time() - start_time > job_timeout:
@@ -727,8 +728,7 @@ def run_jobs_concurrent(
                     
                     if job_run_info['success']:
                         state = job_run_info['state']
-                        
-                        # Update status if changed
+                        consecutive_failures = 0  # Reset on success
                         update_status(job_id, state, job_run_id)
                         
                         if state in final_states:
@@ -737,22 +737,47 @@ def run_jobs_concurrent(
                         else:
                             time.sleep(wait_poll_interval)
                     else:
-                        state = 'MonitorError'
-                        update_status(job_id, state, job_run_id)
-                        break
+                        # HTTP error occurred during monitoring
+                        consecutive_failures += 1
+                        error_msg = job_run_info.get('error', 'Unknown error')
+                        print(f"Monitor API error for job {job_run_id} (attempt {consecutive_failures}/3): {error_msg}")
+                        
+                        if consecutive_failures >= 3:
+                            print(f"Max monitor failures reached for job {job_run_id}. Attempting final status check...")
+                            
+                            # Try one final time before giving up
+                            final_attempt = get_job_run_info(client, project_id, job_id, job_run_id)
+                            if final_attempt['success']:
+                                state = final_attempt['state']
+                                final_run_info = final_attempt
+                                update_status(job_id, state, job_run_id)
+                                print(f"Final attempt succeeded: {state}")
+                                break
+                            else:
+                                state = 'MonitorError'
+                                update_status(job_id, state, job_run_id)
+                                print(f"Final attempt also failed: {final_attempt.get('error', 'Unknown')}")
+                                break
+                        else:
+                            # Wait longer and continue monitoring
+                            print(f"Retrying monitor in {wait_poll_interval * 2}s...")
+                            time.sleep(wait_poll_interval * 2)
+                            continue
                         
                 except Exception as e:
                     print(f"\nError monitoring job {job_run_id}: {e}")
                     state = 'MonitorError'
                     update_status(job_id, state, job_run_id)
                     break
-            
+
+            job_succeeded = state in {'Completed', 'CompletedWithWarnings'}
+
             return {
                 'job_id': job_id,
                 'job_run_id': job_run_id,
                 'job_name': job_name,
                 'final_state': state,
-                'success': True,
+                'success': job_succeeded,
                 'index': index,
                 'flow_data': flow_data,
                 'run_info': final_run_info,
@@ -793,7 +818,7 @@ def run_jobs_concurrent(
             try:
                 for future in as_completed(futures, timeout=total_timeout):
                     try:
-                        result = future.result(timeout=10)  # 10s cautious guard
+                        result = future.result()
                         results.append(result)
                     except concurrent.futures.TimeoutError:
                         results.append({
