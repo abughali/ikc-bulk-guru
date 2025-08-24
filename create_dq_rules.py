@@ -6,7 +6,7 @@ from cpd_client import CPDClient
 from dotenv import load_dotenv
 
 # Constants
-OUTPUT_CONNECTION_ID="acb03b96-1d60-40bc-aae3-46ab56071832"
+OUTPUT_CONNECTION_ID="d12b74c3-746d-4956-bfd6-8e21f170f2b8"
 OUTPUT_SCHEMA_NAME="BIDEMODATA"
 OUTPUT_TABLE_NAME="DQ_OUTPUT"
 FAILED_RECORDS_COUNT=5
@@ -345,11 +345,11 @@ def create_dq_rule(client: CPDClient, rule_name: str, description: str, dimensio
                     "type": "metric",
                     "metric": "definition_id"
                 },
-                {
-                    "name": "Bound_to_column",
-                    "type": "metric",
-                    "metric": "definition_bound_column"
-                },
+              #  {
+              #      "name": "Bound_to_column",
+              #      "type": "metric",
+              #      "metric": "definition_bound_column"
+              #  },
                 {
                     "name": "Data_quality_definition",
                     "type": "metric",

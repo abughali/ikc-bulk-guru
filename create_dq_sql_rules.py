@@ -23,7 +23,7 @@ except ImportError:
     print("WARNING: pyarrow not installed. SQL validation will be disabled.")
 
 # SQL Validation Configuration
-VALIDATE_SQL = True  # Set to False to disable SQL validation
+VALIDATE_SQL = False  # Set to False to disable SQL validation
 
 # Constants
 INPUT_CONNECTION_ID = "803c91ef-a8b6-49c6-9c89-ee1b96f922d4"  # Connection for SQL queries
