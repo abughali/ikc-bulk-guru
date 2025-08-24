@@ -151,3 +151,5 @@ Thumbs.db
 # CPD specific
 cpd_credentials.json
 .cpd_config
+
+out/
