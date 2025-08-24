@@ -153,3 +153,5 @@ cpd_credentials.json
 .cpd_config
 
 out/
+output/
+input/
