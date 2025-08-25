@@ -29,14 +29,13 @@ cp .envExample .env
 
 5. Configure your `.env` file with your CPD environment details:
 
-### Environment Configuration Options
+### Environment Configuration
 
-The `.env` file supports multiple authentication methods and deployment types. Choose the configuration that matches your CPD environment:
+The `.env` file supports multiple authentication methods and deployment types.
 
 #### For Cloud Pak for Data Software (On-Premises) with Password Authentication
 ```env
 CPD_HOST=your-cpd-cluster.com
-ENV_TYPE=SW
 AUTH_TYPE=PASSWORD
 USERNAME=your-username
 PASSWORD=your-password
@@ -47,19 +46,9 @@ PROJECT_ID=your-project-id
 #### For Cloud Pak for Data Software (On-Premises) with API Key Authentication
 ```env
 CPD_HOST=your-cpd-cluster.com
-ENV_TYPE=SW
 AUTH_TYPE=API_KEY
 USERNAME=your-username
 API_KEY=your-api-key
-CATALOG_ID=your-catalog-id
-PROJECT_ID=your-project-id
-```
-
-#### For IBM Cloud Pak for Data as a Service (SaaS)
-```env
-CPD_HOST=your-cpd-saas-url.com
-ENV_TYPE=SAAS
-API_KEY=your-ibm-cloud-api-key
 CATALOG_ID=your-catalog-id
 PROJECT_ID=your-project-id
 ```
@@ -70,7 +59,6 @@ PROJECT_ID=your-project-id
 |----------|----------|-------------|---------|
 | `CPD_HOST` | Yes | CPD cluster hostname (without https://) | `cpd-cluster.example.com` |
 | `CPD_FS_HOST` | Conditional | CPD flight service endpoint (without protocol and port) | `flight-service.cpd-cluster.example.com` |
-| `ENV_TYPE` | No | Environment type: `SW` (software) or `SAAS` | `SW` (default) |
 | `AUTH_TYPE` | No | Authentication method: `PASSWORD` or `API_KEY` | `PASSWORD` (default) |
 | `USERNAME` | Conditional | CPD username (required for SW environments) | `admin` |
 | `PASSWORD` | Conditional | CPD password (required when AUTH_TYPE=PASSWORD) | `your-secure-password` |
@@ -106,12 +94,6 @@ Reference: https://www.ibm.com/docs/en/cloud-paks/cp-data/5.1.x?topic=tutorials-
 1. Navigate to **Projects** in CPD
 2. Open your target project
 3. Find the project ID in the URL: `/data/projects/{PROJECT_ID}/`
-
-#### Authentication Method Recommendations
-
-- **Password Authentication**: Simplest for development and testing
-- **API Key Authentication**: Recommended for production use and automation
-- **SaaS**: Always requires IBM Cloud API key authentication
 
 #### Security Notes
 
@@ -191,10 +173,10 @@ Asset Name,Column Name,Column Description,Term Name,Term Category,Classification
 
 **Example CSV content:**
 ```csv
-Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags
-ADMIN.T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1
-ADMIN.T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1
-ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1|TAG2
+Asset Name,Column Name,Column Description,Term Name,Term Category,Term 2 Name,Term 2 Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags
+ADMIN.T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,,,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1
+ADMIN.T_US_STATES,CODE,Code of the country name,Country Code,Location,,,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1
+ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,,,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1|TAG2
 ```
 
 **Column Descriptions:**
@@ -203,6 +185,8 @@ ADMIN.T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncat
 - **Column Description**: Description of the column
 - **Term Name**: Business term to assign (leave empty to skip)
 - **Term Category**: Category where the term is located
+- **Term 2 Name**: Second business term to assign (leave empty to skip)
+- **Term 2 Category**: Category where the second term is located
 - **Classification**: Classification to assign (leave empty to skip)
 - **Classification Category**: Category where the classification is located
 - **Classification2**: Second classification to assign (leave empty to skip)
@@ -233,6 +217,7 @@ By default, it looks for `col_term_map.csv` in the current directory. You can mo
 
 The script creates an output file `out/{input_filename}_{date}_{time}.csv` with additional columns:
 - **Term Result**: SUCCESS, FAILED, or SKIPPED
+- **Term 2 Result**: SUCCESS, FAILED, or SKIPPED
 - **Classification Result**: SUCCESS, FAILED, or SKIPPED
 - **Classification2 Result**: SUCCESS, FAILED, or SKIPPED  
 - **Data Class Result**: SUCCESS, FAILED, or SKIPPED
@@ -240,10 +225,10 @@ The script creates an output file `out/{input_filename}_{date}_{time}.csv` with 
 
 **Example output:**
 ```csv
-Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags,Term Result,Classification Result,Classification2 Result,Data Class Result,Update Status
-T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS,SUCCESS
-T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1,SUCCESS,SUCCESS,SUCCESS,SUCCESS,SUCCESS
-T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1|TAG2,SUCCESS,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags,Term Result,Term 2 Result,Classification Result,Classification2 Result,Data Class Result,Update Status
+T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1,SUCCESS,SKIPPED,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+T_US_STATES,CODE,Code of the country name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1,SUCCESS,SKIPPED,SUCCESS,SUCCESS,SUCCESS,SUCCESS
+T_US_STATES,STATE,The state name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],US State Code,[uncategorized],TAG1|TAG2,SUCCESS,SKIPPED,SUCCESS,SUCCESS,SUCCESS,SUCCESS
 ```
 
 ## Best Practices
