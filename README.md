@@ -60,9 +60,9 @@ PROJECT_ID=your-project-id
 | `CPD_HOST` | Yes | CPD cluster hostname (without https://) | `cpd-cluster.example.com` |
 | `CPD_FS_HOST` | Conditional | CPD flight service endpoint (without protocol and port) | `flight-service.cpd-cluster.example.com` |
 | `AUTH_TYPE` | No | Authentication method: `PASSWORD` or `API_KEY` | `PASSWORD` (default) |
-| `USERNAME` | Conditional | CPD username (required for SW environments) | `admin` |
+| `USERNAME` | Conditional | CPD username | `admin` |
 | `PASSWORD` | Conditional | CPD password (required when AUTH_TYPE=PASSWORD) | `your-secure-password` |
-| `API_KEY` | Conditional | API key (required for SAAS or when AUTH_TYPE=API_KEY) | `your-api-key` |
+| `API_KEY` | Conditional | API key (required when AUTH_TYPE=API_KEY) | `your-api-key` |
 | `CATALOG_ID` | Optional | Target catalog ID for asset operations | `12345678-1234-1234-1234-123456789abc` |
 | `PROJECT_ID` | Optional | Project ID for project-scoped operations | `87654321-4321-4321-4321-cba987654321` |
 
