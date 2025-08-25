@@ -31,7 +31,7 @@ cp .envExample .env
 
 ### Environment Configuration
 
-The `.env` file supports multiple authentication methods and deployment types.
+The `.env` file supports multiple authentication methods.
 
 #### For Cloud Pak for Data Software (On-Premises) with Password Authentication
 ```env
@@ -78,12 +78,7 @@ PROJECT_ID=your-project-id
 3. Open your target catalog
 4. Find the catalog ID in the URL: `/data/catalogs/{CATALOG_ID}/`
 
-**API_KEY (for SaaS environments):**
-1. Go to [IBM Cloud API Keys](https://cloud.ibm.com/iam/apikeys)
-2. Create a new API key or use an existing one
-3. Ensure the key has appropriate permissions for your CPD instance
-
-**API_KEY (for on-premises with API key auth):**
+**API_KEY (for API key auth):**
 1. Log into CPD web interface
 2. Go to **Profile** → **API keys**
 3. Generate a new API key
