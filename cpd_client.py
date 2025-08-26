@@ -252,7 +252,7 @@ class CPDClient:
             response = session.request(method, url, verify=False, **kwargs)
             
             # If we get an authentication error, try to refresh token and retry once
-            if response.status_code in [401, 403]:
+            if response.status_code == 401:
                 self._logger.warning(f"Authentication failure ({response.status_code}) for {method} {endpoint}, attempting token refresh")
                 
                 try:
@@ -263,7 +263,7 @@ class CPDClient:
                     session.headers.update({'Authorization': f'Bearer {token}'})
                     response = session.request(method, url, verify=False, **kwargs)
                     
-                    if response.status_code in [401, 403]:
+                    if response.status_code == 401:
                         self._logger.error(f"Authentication still failing after token refresh for {method} {endpoint}")
                     else:
                         self._logger.info(f"Request succeeded after token refresh for {method} {endpoint}")
