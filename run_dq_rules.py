@@ -251,7 +251,7 @@ def listAssets(client: CPDClient, asset_type: str, query: str, project_id: str) 
         resp = client.post(url, json=payload)
         if resp.status_code != 200:
             body = resp.text
-            raise ValueError(f"Error scanning catalog (HTTP {resp.status_code}): {body}")
+            raise ValueError(f"Error scanning project (HTTP {resp.status_code}): {body}")
 
         data = resp.json()
         results = data.get("results", [])
@@ -821,12 +821,12 @@ def print_execution_summary(summary_data: List[Dict]):
     # Statistics
     total_runs = len(summary_data)
     successful_runs = len([s for s in summary_data if s['success']])
-    completed_runs = len([s for s in summary_data if s['state'] == 'Completed'])
+    completed_runs = len([s for s in summary_data if s['state'] in ['Completed','CompletedWithWarnings']])
     
     print(f"\nEXECUTION SUMMARY STATISTICS:")
     print(f"   • Total Runs: {total_runs}")
     print(f"   • Successful Runs: {successful_runs} ({(successful_runs/total_runs*100):.1f}%)")
-    print(f"   • Completed Successfully: {completed_runs} ({(completed_runs/total_runs*100):.1f}%)")
+    print(f"   • Completed Successfully (including warnings): {completed_runs} ({(completed_runs/total_runs*100):.1f}%)")
     print(f"   • Failed/Error: {total_runs - successful_runs}")
 
 # ============================================================================
