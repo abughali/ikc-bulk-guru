@@ -19,16 +19,16 @@ This repo demonstrates how the IKC API (formerly Watson Data Platform API) can b
 | `create_projects.py` | Creates new projects with collaborators (members) |
 | `create_users.py` | Creates platform user accounts |
 | `create_views.py` | Creates views (query-based) assets |
-| `export_artifacts.py` | Exports artifacts and metadata from IKC |
-| `asset_level_update.py` | Updates asset-level metadata per project or catalog |
-| `bulk_assign_catalog.py` | Bulk assigns metadata to catalog assets columns|
-| `bulk_assign_project.py` | Bulk assigns metadata to project assets columns|
-| `export_projects_assets.py` | Exports asset metadata from all projects |
-| `import_projects_assets.py` | Imports and updates asset metadata across projects |
-| `export_projects_assets_columns.py` | Exports column-level metadata from project assets |
-| `import_projects_assets_columns.py` | Imports and updates column-level metadata |
-| `update_custom_column_props.py` | Updates custom properties on assets columns |
-| `create_dq_rules.py` | Creates data quality definitions and rules|
+| `export_artifacts.py` | Exports governance artifacts with their primary category |
+| `asset_level_update.py` | Updates data asset metadata in a project or a catalog |
+| `bulk_assign_catalog.py` | Updates data asset columns metadata in a catalog |
+| `bulk_assign_project.py` | Updates data asset columns metadata in a project |
+| `export_projects_assets.py` | Exports asset-level metadata from all projects |
+| `import_projects_assets.py` | Updates asset-level metadata in multiple projects |
+| `export_projects_assets_columns.py` | Exports column-level metadata from all projects |
+| `import_projects_assets_columns.py` | Updates column-level metadata in multiple projects |
+| `update_custom_column_props.py` | Updates column-level custom property values |
+| `create_dq_rules.py` | Creates data quality definitions and rules |
 | `create_dq_sql_rules.py` | Creates SQL-based data quality rules |
 | `run_dq_rules.py` | Executes data quality rules and monitors results |
 
