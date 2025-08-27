@@ -593,4 +593,4 @@ if __name__ == "__main__":
     # Project ID,Asset Name,Column Name,Column Description,Term Name,Term Category,Classification,Classification Category,Classification2,Classification2 Category,Data Class Name,Data Class Category,Tags
     # f30e8b00-7267-4d24-acc6-34cbb0ea36b1,T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1|TAG2
 
-    main(input_filename='projects_metadata.csv')
+    main(input_filename='projects_assets_columns.csv')
