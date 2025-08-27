@@ -11,6 +11,27 @@ This repo demonstrates how the IKC API (formerly Watson Data Platform API) can b
 - Visual Studio Code (VSC) <https://code.visualstudio.com/>
 - Python Extension of VSC <https://code.visualstudio.com/docs/python/python-tutorial>
 
+## Scripts Overview
+
+| Script Name | Purpose |
+|-------------|---------|
+| `cpd_client.py` | Shared API client library for connection handling |
+| `create_projects.py` | Creates new projects with collaborators (members) |
+| `create_users.py` | Creates platform user accounts |
+| `create_views.py` | Creates views (query-based) assets |
+| `export_artifacts.py` | Exports artifacts and metadata from IKC |
+| `asset_level_update.py` | Updates asset-level metadata per project or catalog |
+| `bulk_assign_catalog.py` | Bulk assigns metadata to catalog assets columns|
+| `bulk_assign_project.py` | Bulk assigns metadata to project assets columns|
+| `export_projects_assets.py` | Exports asset metadata from all projects |
+| `import_projects_assets.py` | Imports and updates asset metadata across projects |
+| `export_projects_assets_columns.py` | Exports column-level metadata from project assets |
+| `import_projects_assets_columns.py` | Imports and updates column-level metadata |
+| `update_custom_column_props.py` | Updates custom properties on assets columns |
+| `create_dq_rules.py` | Creates data quality definitions and rules|
+| `create_dq_sql_rules.py` | Creates SQL-based data quality rules |
+| `run_dq_rules.py` | Executes data quality rules and monitors results |
+
 ## Installation
 
 1. Make sure the prerequisites are installed.
