@@ -7,9 +7,6 @@ from typing import Dict, List
 # Global cache for artifacts
 _artifact_cache: Dict[str, List[Dict]] = {}
 
-# Global cache for uid -> username mapping
-_user_cache: Dict[int, str] = {}
-
 
 def _load_artifacts(client: CPDClient, artifact_type: str):
     """Load artifacts into cache if not already loaded"""
@@ -63,48 +60,6 @@ def _load_artifacts(client: CPDClient, artifact_type: str):
     print(f"Loaded {len(all_results)} {artifact_type} artifacts")
 
 
-def _load_users(client: CPDClient):
-    """Load users into cache if not already loaded"""
-    if _user_cache:
-        return
-        
-    offset = 0
-    batch_size = 100
-    
-    while True:
-        response = client.get("/usermgmt/v1/usermgmt/users", 
-                            params={"offset": offset, "limit": batch_size, "include_groups": "false"})
-        
-        if response.status_code != 200:
-            print(f"Error fetching users: {response.status_code} {response.text}")
-            break
-            
-        users = response.json()
-        if not users:
-            break
-        
-        for user in users:
-            uid = user.get('uid')
-            username = user.get('username', '')
-            if uid:
-                # Convert string UIDs to integers for consistent lookup
-                if isinstance(uid, str) and uid.isdigit():
-                    _user_cache[int(uid)] = username
-                elif isinstance(uid, int):
-                    _user_cache[uid] = username
-            
-        if len(users) < batch_size:
-            break
-        offset += batch_size
-    
-    print(f"Loaded {len(_user_cache)} users")
-
-
-def get_username(uid: int) -> str:
-    """Get username by uid from cache"""
-    return _user_cache.get(uid, '')
-
-
 def lookup_term_by_id(term_id: str) -> tuple[str, str]:
     """
     Lookup term name and category by term_id (global_id from term metadata)
@@ -141,19 +96,34 @@ def lookup_classification_by_global_id(global_id: str) -> tuple[str, str]:
     return ("", "")
 
 
+def lookup_data_class_by_id(data_class_id: str) -> tuple[str, str]:
+    """
+    Lookup data class name and category by id from data class metadata
+    Returns (data_class_name, data_class_category)
+    """
+    if not data_class_id or "data_class" not in _artifact_cache:
+        return ("", "")
+    
+    for artifact in _artifact_cache["data_class"]:
+        artifact_global_id = artifact.get("entity", {}).get("artifacts", {}).get("global_id", "")
+        if artifact_global_id == data_class_id:
+            name = artifact.get("metadata", {}).get("name", "")
+            category = artifact.get("categories", {}).get("primary_category_name", "")
+            return (name, category)
+    
+    return ("", "")
+
+
 def preload_all_artifacts(client: CPDClient):
-    """Preload all artifact types and users into cache at the beginning"""
+    """Preload all artifact types into cache at the beginning"""
     print("="*60)
-    print("PRELOADING ALL ARTIFACTS AND USERS INTO CACHE")
+    print("PRELOADING ALL ARTIFACTS INTO CACHE")
     print("="*60)
     
-    artifact_types = ["glossary_term", "classification"]
+    artifact_types = ["glossary_term", "classification", "data_class"]
     
     for artifact_type in artifact_types:
         _load_artifacts(client, artifact_type)
-    
-    # Load users for owner lookup
-    _load_users(client)
 
 
 def get_all_projects():
@@ -245,11 +215,11 @@ def scan_data_asset(client, project_id, asset_id):
         print(f"Error scanning asset {asset_id}: {response.status_code} - {response.text}")
         return None
     else:
-        return response.json()
+        return response.json().get('entity')
 
 
-def export_asset_metadata():
-    """Export all project assets with their existing metadata populated in CSV format"""
+def export_metadata():
+    """Export all project assets and columns with their existing metadata populated in CSV format"""
     
     # Create exports directory if it doesn't exist
     os.makedirs("exports", exist_ok=True)
@@ -268,17 +238,18 @@ def export_asset_metadata():
         return
     
     total_assets = 0
+    total_columns = 0
     
     with open(filename, 'w', newline='', encoding='utf-8') as csv_file:
         writer = csv.writer(csv_file)
-        # Write header matching the asset updater format with Project_ID first
-        writer.writerow(['Project_ID', 'Asset', 'Display_Name', 'Description', 'Tags', 
-                        'Term1 Name', 'Term1 Category', 'Term2 Name', 'Term2 Category',
-                        'Classification1 Name', 'Classification1 Category', 
-                        'Classification2 Name', 'Classification2 Category', 'Owner'])
+        
+        writer.writerow(['Project ID', 'Project Name', 'Asset Name', 'Column Name', 'Column Description', 
+                         'Term1 Name', 'Term1 Category', 'Term2 Name', 'Term2 Category',
+                         'Classification1 Name', 'Classification1 Category', 
+                         'Classification2 Name', 'Classification2 Category', 'Data Class Name', 'Data Class Category', 'Tags'])
         
         with CPDClient() as client:
-            # Preload all artifacts and users into cache for lookups
+            # Preload all artifacts into cache for category lookups
             preload_all_artifacts(client)
             
             print("\n" + "="*60)
@@ -301,112 +272,122 @@ def export_asset_metadata():
                         asset_id = asset['metadata']['asset_id']
                         asset_name = asset['metadata']['name']
                         
-                        print(f"    Processing asset: {asset_name}")
-                        
                         # Get asset details including existing metadata
                         try:
-                            asset_data = scan_data_asset(client, project_id, asset_id)
+                            asset_details = scan_data_asset(client, project_id, asset_id)
                             
-                            if asset_data:
-                                # Extract asset-level metadata
-                                metadata = asset_data.get('metadata', {})
-                                entity = asset_data.get('entity', {})
+                            if asset_details and 'data_asset' in asset_details:
+                                columns = asset_details['data_asset'].get('columns', [])
+                                column_info = asset_details.get('column_info', {})  # Get existing metadata
                                 
-                                # Get basic metadata
-                                description = metadata.get('description', '')
+                                print(f"    Processing asset: {asset_name} ({len(columns)} columns)")
                                 
-                                # Get display name from semantic name
-                                display_name = ""
-                                if 'data_asset' in entity:
-                                    semantic_name = entity['data_asset'].get('semantic_name', {})
-                                    if semantic_name:
-                                        display_name = semantic_name.get('expanded_name', '')
-                                
-                                # Get tags
-                                tags = metadata.get('tags', [])
-                                tags_string = "|".join(tags) if tags else ""
-                                
-                                # Get business terms
-                                term1_name = ""
-                                term1_category = ""
-                                term2_name = ""
-                                term2_category = ""
-                                
-                                asset_terms = entity.get('asset_terms', {})
-                                if asset_terms and 'list' in asset_terms:
-                                    terms_list = asset_terms['list']
-                                    if len(terms_list) > 0:
-                                        term_id = terms_list[0].get('term_id', '')
-                                        if term_id:
-                                            term1_name, term1_category = lookup_term_by_id(term_id)
-                                    if len(terms_list) > 1:
-                                        term_id = terms_list[1].get('term_id', '')
-                                        if term_id:
-                                            term2_name, term2_category = lookup_term_by_id(term_id)
-                                
-                                # Get classifications
-                                classification1_name = ""
-                                classification1_category = ""
-                                classification2_name = ""
-                                classification2_category = ""
-                                
-                                data_profile = entity.get('data_profile', {})
-                                if data_profile and 'data_classification_manual' in data_profile:
-                                    classifications = data_profile['data_classification_manual']
-                                    if len(classifications) > 0:
-                                        global_id = classifications[0].get('global_id', '')
-                                        if global_id:
-                                            classification1_name, classification1_category = lookup_classification_by_global_id(global_id)
-                                    if len(classifications) > 1:
-                                        global_id = classifications[1].get('global_id', '')
-                                        if global_id:
-                                            classification2_name, classification2_category = lookup_classification_by_global_id(global_id)
-                                
-                                # Get owner - do lookup directly
-                                owner_username = ""
-                                owner_id = metadata.get('owner_id', '')
-                                if owner_id:
-                                    if owner_id.isdigit():
-                                        # Numeric user ID - lookup username in cache
-                                        uid = int(owner_id)
-                                        owner_username = get_username(uid)
-                                        if not owner_username:
-                                            print(f"    Warning: User ID {uid} not found in user cache")
-                                            owner_username = f"UID:{owner_id}"  # Fallback
-                                    else:
-                                        # String-based ID (like 'icp4d-dev') - return as-is
-                                        owner_username = owner_id
-                                
-                                # Create row with existing asset metadata (Project_ID first)
-                                row = [
-                                    project_id,                    # Project_ID
-                                    asset_name,                    # Asset
-                                    display_name,                  # Display_Name
-                                    description,                   # Description
-                                    tags_string,                   # Tags
-                                    term1_name,                    # Term1 Name
-                                    term1_category,                # Term1 Category
-                                    term2_name,                    # Term2 Name
-                                    term2_category,                # Term2 Category
-                                    classification1_name,          # Classification1 Name
-                                    classification1_category,      # Classification1 Category
-                                    classification2_name,          # Classification2 Name
-                                    classification2_category,      # Classification2 Category
-                                    owner_username                 # Owner
-                                ]
-                                writer.writerow(row)
-                                
+                                for column in columns:
+                                    try:
+                                        column_name = column['name']
+                                        
+                                        # Get existing metadata for this column
+                                        existing_metadata = column_info.get(column_name, {})
+                                        
+                                        # Extract existing values
+                                        description = existing_metadata.get('column_description', '')
+                                        
+                                        # Extract existing terms
+                                        term1_name = ""
+                                        term1_category = ""
+                                        term2_name = ""
+                                        term2_category = ""
+                                        terms = existing_metadata.get('column_terms', [])
+                                        if terms:
+                                            # First term
+                                            if len(terms) > 0:
+                                                term_id = terms[0].get('term_id', '')
+                                                if term_id:
+                                                    term1_name, term1_category = lookup_term_by_id(term_id)
+                                            # Second term
+                                            if len(terms) > 1:
+                                                term_id_2 = terms[1].get('term_id', '')
+                                                if term_id_2:
+                                                    term2_name, term2_category = lookup_term_by_id(term_id_2)
+                                        
+                                        # Extract existing classifications - lookup names and categories by global_id
+                                        classification1_name = ""
+                                        classification1_category = ""
+                                        classification2_name = ""
+                                        classification2_category = ""
+                                        classifications = existing_metadata.get('column_classifications', [])
+                                        if classifications:
+                                            if len(classifications) > 0:
+                                                classification1_global_id = classifications[0].get('global_id', '')
+                                                if classification1_global_id:
+                                                    classification1_name, classification1_category = lookup_classification_by_global_id(classification1_global_id)
+                                            if len(classifications) > 1:
+                                                classification2_global_id = classifications[1].get('global_id', '')
+                                                if classification2_global_id:
+                                                    classification2_name, classification2_category = lookup_classification_by_global_id(classification2_global_id)
+                                        
+                                        # Extract existing data class - lookup name and category by data class id
+                                        data_class_name = ""
+                                        data_class_category = ""
+                                        data_class = existing_metadata.get('data_class', {})
+                                        if data_class and 'selected_data_class' in data_class:
+                                            data_class_id = data_class['selected_data_class'].get('id', '')
+                                            if data_class_id:
+                                                data_class_name, data_class_category = lookup_data_class_by_id(data_class_id)
+                                        
+                                        # Extract existing tags
+                                        tags = existing_metadata.get('column_tags', [])
+                                        tags_string = "|".join(tags) if tags else ""
+                                        
+                                        # Create populated row with existing metadata
+                                        row = [
+                                            project_id,                   # Project ID
+                                            project_name,                 # Project Name
+                                            asset_name,                   # Asset Name  
+                                            column_name,                  # Column Name
+                                            description,                  # Column Description
+                                            term1_name,                   # Term1 Name
+                                            term1_category,               # Term1 Category
+                                            term2_name,                   # Term2 Name
+                                            term2_category,               # Term2 Category
+                                            classification1_name,         # Classification1 Name
+                                            classification1_category,     # Classification1 Category
+                                            classification2_name,         # Classification2 Name
+                                            classification2_category,     # Classification2 Category
+                                            data_class_name,              # Data Class Name
+                                            data_class_category,          # Data Class Category
+                                            tags_string                   # Tags
+                                        ]
+                                        writer.writerow(row)
+                                        total_columns += 1
+                                        
+                                    except KeyError as e:
+                                        print(f"      Warning: Missing key {e} for column in asset {asset_name}")
+                                        row = [
+                                            project_id,                      # Project ID
+                                            project_name,                    # Project Name
+                                            asset_name,                      # Asset Name
+                                            column.get('name', 'Unknown'),   # Column Name
+                                            "",                              # Column Description (empty)
+                                            "",                              # Term1 Name (empty)
+                                            "",                              # Term1 Category (empty)
+                                            "",                              # Term2 Name (empty)
+                                            "",                              # Term2 Category (empty)
+                                            "",                              # Classification1 Name (empty)
+                                            "",                              # Classification1 Category (empty)
+                                            "",                              # Classification2 Name (empty)
+                                            "",                              # Classification2 Category (empty)
+                                            "",                              # Data Class Name (empty)
+                                            "",                              # Data Class Category (empty)
+                                            ""                               # Tags (empty)
+                                        ]
+                                        writer.writerow(row)
+                                        total_columns += 1
                             else:
-                                print(f"    Warning: No asset data found for {asset_name}")
-                                # Write empty row for asset with no metadata (include Project_ID)
-                                row = [project_id, asset_name, "", "", "", "", "", "", "", "", "", "", "", ""]
-                                writer.writerow(row)
+                                print(f"    Warning: No data_asset info found for {asset_name}")
                                 
                         except Exception as e:
                             print(f"    Error processing asset {asset_name}: {str(e)}")
-                            # Write empty row for failed asset (include Project_ID)
-                            row = [project_id, asset_name, "", "", "", "", "", "", "", "", "", "", "", ""]
-                            writer.writerow(row)
                             continue
                     
                 except Exception as e:
@@ -416,19 +397,20 @@ def export_asset_metadata():
     print(f"Exported to file: {filename}")
     print(f"Total projects processed: {len(projects)}")
     print(f"Total assets processed: {total_assets}")
+    print(f"Total columns exported: {total_columns}")
     print(f"\nNext steps:")
     print(f"1. Open {filename} in Excel")
     print(f"2. Review and modify existing metadata as needed")
-    print(f"3. Add missing metadata for assets without assignments")
-    print(f"4. Save the file and use it as input for the asset updater script")
+    print(f"3. Add missing metadata for columns without assignments")
+    print(f"4. Save the file and use it as input for import_projects_assets_columns.py script")
     
     return filename
 
 
 def main():
     """Main execution function"""
-    print("Exporting asset metadata from all CPD projects...")
-    export_asset_metadata()
+    print("Creating populated metadata from CPD projects...")
+    export_metadata()
 
 
 if __name__ == "__main__":
