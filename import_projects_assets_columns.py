@@ -7,6 +7,9 @@ from typing import Dict, List, Optional, Tuple
 
 load_dotenv(override=True)
 
+# Global variable to store current user ID
+current_user_id = None
+
 # Global cache for artifacts
 _artifact_cache: Dict[str, List[Dict]] = {}
 
@@ -108,6 +111,30 @@ def get_data_class_id(primary_category: str, data_class_name: str) -> Optional[s
     return result[0] if result else None
 
 
+def getCurrentUserInfo(client: CPDClient) -> str:
+    """
+    Get current user information and return the user ID.
+    Returns the UID if successful, '1000330999' (admin) as fallback.
+    """
+    url = "/usermgmt/v1/user/currentUserInfo"
+    
+    response = client.get(url)
+    
+    if response.status_code == 200:
+        try:
+            user_data = response.json()
+            user_id = user_data.get('uid', '1000330999')
+            user_name = user_data.get('user_name', 'unknown')
+            print(f"✓ Current user: {user_name} (ID: {user_id})")
+            return user_id
+        except Exception as e:
+            print(f"✗ Error parsing user info: {e}")
+            return '1000330999'
+    else:
+        print(f"✗ Failed to get user info: {response.status_code} - {response.text}")
+        return '1000330999'
+
+
 def getAssetByName(client: CPDClient, project_id: str, name: str) -> str:
     """
     This function retrieves the ID of an asset in a project based on its name.
@@ -116,7 +143,7 @@ def getAssetByName(client: CPDClient, project_id: str, name: str) -> str:
     
     payload = {
         "query": f"asset.name:{name}",
-        "limit": 20
+        "limit": 2
     }
     
     response = client.post(url, json=payload)
@@ -342,6 +369,14 @@ def main(input_filename):
         preload_all_artifacts(client)
         
         print("\n" + "="*60)
+        print("GETTING CURRENT USER INFORMATION")
+        print("="*60)
+        
+        # Get current user information and store globally
+        global current_user_id
+        current_user_id = getCurrentUserInfo(client)
+        
+        print("\n" + "="*60)
         print("PROCESSING CSV FILE")
         print("="*60)
         
@@ -412,6 +447,9 @@ def main(input_filename):
                         # Build column data structure
                         column_data = {}
                         
+                        # Generate assignment date
+                        assignment_date = datetime.now().isoformat(timespec='seconds') + "Z"
+                        
                         # Process description assignment
                         if column_description.strip():
                             column_data['description'] = column_description.strip()
@@ -426,7 +464,9 @@ def main(input_filename):
                             if term1_global_id:
                                 terms.append({
                                     'term_display_name': term1_name,
-                                    'term_id': term1_global_id
+                                    'term_id': term1_global_id,
+                                    'user': current_user_id,
+                                    'assignment_date': assignment_date
                                 })
                                 term1_result = "SUCCESS"
                                 print(f"  ✓ Term1: {term1_name} (Category: {term1_category})")
@@ -442,7 +482,9 @@ def main(input_filename):
                             if term2_global_id:
                                 terms.append({
                                     'term_display_name': term2_name,
-                                    'term_id': term2_global_id
+                                    'term_id': term2_global_id,
+                                    'user': current_user_id,
+                                    'assignment_date': assignment_date
                                 })
                                 term2_result = "SUCCESS"
                                 print(f"  ✓ Term2: {term2_name} (Category: {term2_category})")
@@ -465,7 +507,9 @@ def main(input_filename):
                                 classifications.append({
                                     'id': artifact_id,
                                     'global_id': global_id,
-                                    'name': classification1_name
+                                    'name': classification1_name,
+                                    'user': current_user_id,
+                                    'assignment_date': assignment_date
                                 })
                                 classification1_result = "SUCCESS"
                                 print(f"  ✓ Classification1: {classification1_name} (Category: {classification1_category})")
@@ -482,7 +526,9 @@ def main(input_filename):
                                 classifications.append({
                                     'id': artifact_id,
                                     'global_id': global_id,
-                                    'name': classification2_name
+                                    'name': classification2_name,
+                                    'user': current_user_id,
+                                    'assignment_date': assignment_date
                                 })
                                 classification2_result = "SUCCESS"
                                 print(f"  ✓ Classification2: {classification2_name} (Category: {classification2_category})")
@@ -626,4 +672,4 @@ if __name__ == "__main__":
     # Project ID,Project Name,Asset Name,Column Name,Column Description,Term1 Name,Term1 Category,Term2 Name,Term2 Category,Classification1 Name,Classification1 Category,Classification2 Name,Classification2 Category,Data Class Name,Data Class Category,Tags
     # f30e8b00-7267-4d24-acc6-34cbb0ea36b1,My Project,T_US_STATES,ABBREV,Abbreviation of name,Country Code,Location,Region Code,Location,Confidential,[uncategorized],PII,[uncategorized],Country Code,Location Data Classes,TAG1|TAG2
 
-    main(input_filename='exports/projects_assets_columns_20250909_224019.csv')
+    main(input_filename='exports/projects_assets_columns_20250910_000030.csv')
